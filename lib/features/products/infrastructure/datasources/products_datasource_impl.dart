@@ -16,14 +16,49 @@ class ProductsDatasourceImpl extends ProductsDatasource {
           },
         ));
 
+  Future<String> _uploadFile(String path) async {
+    try {
+      final fileName = path.split('/').last;
+
+      final FormData data = FormData.fromMap({
+        'file': await MultipartFile.fromFile(path, filename: fileName),
+      });
+
+      final response = await dio.post('/files/product', data: data);
+
+      return response.data['image'];
+    } catch (e) {
+      throw Exception();
+    }
+  }
+
+  Future<List<String>> _uploadImages(List<String> images) async {
+    try {
+      final imagesToUpload =
+          images.where((image) => image.contains('/')).toList();
+      final imagesToIgnore =
+          images.where((image) => !image.contains('/')).toList();
+
+      final List<Future<String>> imagesJob =
+          imagesToUpload.map(_uploadFile).toList();
+
+      final newImages = await Future.wait(imagesJob);
+      return [...imagesToIgnore, ...newImages];
+    } catch (e) {
+      throw Exception();
+    }
+  }
+
   @override
   Future<Product> createUpdateProduct(Map<String, dynamic> product) async {
     try {
       final String? productId = product['id'];
       final String method = (productId == null) ? 'POST' : 'PATCH';
-      final String url = (productId == null) ? '/products' : '/products/$productId';
+      final String url =
+          (productId == null) ? '/products' : '/products/$productId';
 
       product.remove('id');
+      product['images'] = await _uploadImages(product['images']);
 
       final response = await dio.request(
         url,
